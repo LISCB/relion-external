@@ -23,7 +23,7 @@ SUFFIX_STAR_FILENAME = f'coords_suffix_{PROGRAM_NAME}.star'
 
 TOP_DIR = os.getcwd()
 # MOUSE = r'~~(,_,">'
-MOUSE = r'~~( ϵ:>'
+MOUSE = r'~~( ϵ:> '
 
 
 class StoppableThread(threading.Thread):
@@ -130,13 +130,42 @@ def make_config_files(relion_job_dir, micrograph_paths, cryolo_params):
             f.write(cryolo_config)
 
 
+def _make_updated_progress_bar(progress_time, estimated_time, frac_done):
+    if estimated_time < 60:
+        progress = f'{int(progress_time):3d}'
+    elif estimated_time < 3600:
+        progress = f'{progress_time / 60:.3f}'[:3]
+    else:
+        progress = f'{progress_time / 3600:.1f}'
+    if frac_done < 0.1:
+        estimated_time_text = '??? sec'
+    else:
+        if estimated_time < 60:
+            estimated_time_text = f'{estimated_time:3d} sec'
+        elif estimated_time < 3600:
+            estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
+        else:
+            estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
+
+    p_char = int(frac_done * 64)
+    progress_text = f'\r {progress}/{estimated_time_text} '
+    progress_text += '.' * p_char
+    progress_text += MOUSE
+    progress_text += ' ' * (60 - p_char)
+    cheese_truncation = 0
+    if p_char > 57:
+        cheese_truncation = p_char - 57
+    progress_text += '[oo]'[cheese_truncation:]
+    return progress_text
+
+
 def _monitor_preprocessing(num, stop):
     initial_preproc = None
     frac_preproc = 0
     prior_preproc_count = 0
     start_preproc_time = time.time()
     print(' Preprocessing ...', flush=True)
-    print(' 000/??? sec ~~( ϵ:>                                                           [oo]', end='', flush=True)
+    print(f' 000/??? sec {MOUSE}                                                          [oo]', end='', flush=True)
     while (not stop()) and (frac_preproc < 1):
         output = subprocess.run('find filtered_tmp -name "*.mrc"',
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -152,31 +181,32 @@ def _monitor_preprocessing(num, stop):
         frac_preproc = len(set(output) - initial_preproc) / num
         progress_time = time.time() - start_preproc_time
         estimated_time = int(progress_time / frac_preproc)
-        if estimated_time < 60:
-            progress = f'{int(progress_time):3d}'
-        elif estimated_time < 3600:
-            progress = f'{progress_time / 60:.3f}'[:3]
-        else:
-            progress = f'{progress_time / 3600:.1f}'
-        if frac_preproc < 0.1:
-            estimated_time_text = '??? sec'
-        else:
-            if estimated_time < 60:
-                estimated_time_text = f'{estimated_time:3d} sec'
-            elif estimated_time < 3600:
-                estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
-            else:
-                estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
-
-        p_char = int(frac_preproc * 64)
-        progress_text = f'\r {progress}/{estimated_time_text} '
-        progress_text += '.' * p_char
-        progress_text += MOUSE
-        progress_text += ' ' * (60-p_char)
-        cheese_truncation = 0
-        if p_char > 57:
-            cheese_truncation = p_char - 57
-        progress_text += '[oo]'[cheese_truncation:]
+        progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_preproc)
+        # if estimated_time < 60:
+        #     progress = f'{int(progress_time):3d}'
+        # elif estimated_time < 3600:
+        #     progress = f'{progress_time / 60:.3f}'[:3]
+        # else:
+        #     progress = f'{progress_time / 3600:.1f}'
+        # if frac_preproc < 0.1:
+        #     estimated_time_text = '??? sec'
+        # else:
+        #     if estimated_time < 60:
+        #         estimated_time_text = f'{estimated_time:3d} sec'
+        #     elif estimated_time < 3600:
+        #         estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
+        #     else:
+        #         estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
+        #
+        # p_char = int(frac_preproc * 64)
+        # progress_text = f'\r {progress}/{estimated_time_text} '
+        # progress_text += '.' * p_char
+        # progress_text += MOUSE
+        # progress_text += ' ' * (60-p_char)
+        # cheese_truncation = 0
+        # if p_char > 57:
+        #     cheese_truncation = p_char - 57
+        # progress_text += '[oo]'[cheese_truncation:]
         print(progress_text, end='', flush=True)
         time.sleep(1)
 
@@ -189,7 +219,7 @@ def _monitor_picking(stop):
     prior_pick_count = 0
     start_pick_time = time.time()
     print(' Autopicking ...', flush=True)
-    print(' 000/??? sec ~~( ϵ:>                                                           [oo]',
+    print(f' 000/??? sec {MOUSE}                                                          [oo]',
           end='', flush=True)
     while (not stop()) and (frac_picked < 1):
         output = subprocess.run('find output/CBOX -name "*.cbox"',
@@ -204,31 +234,33 @@ def _monitor_picking(stop):
         frac_pick = pick_count / total_preproc
         progress_time = time.time() - start_pick_time
         estimated_time = int(progress_time / frac_pick)
-        if frac_pick < 0.1:
-            estimated_time_text = '??? sec'
-        else:
-            if estimated_time < 60:
-                estimated_time_text = f'{estimated_time:3d} sec'
-            elif estimated_time < 3600:
-                estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
-            else:
-                estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
-        if estimated_time < 60:
-            progress = f'{int(progress_time):3d}'
-        elif estimated_time < 3600:
-            progress = f'{progress_time / 60:.3f}'[:3]
-        else:
-            progress = f'{progress_time / 3600:.1f}'
-
-        p_char = int(frac_pick * 64)
-        progress_text = f'\r {progress}/{estimated_time_text} '
-        progress_text += '.' * p_char
-        progress_text += MOUSE
-        progress_text += ' ' * (60-p_char)
-        cheese_truncation = 0
-        if p_char > 57:
-            cheese_truncation = p_char - 57
-        progress_text += '[oo]'[cheese_truncation:]
+        progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_pick)
+        #
+        # if frac_pick < 0.1:
+        #     estimated_time_text = '??? sec'
+        # else:
+        #     if estimated_time < 60:
+        #         estimated_time_text = f'{estimated_time:3d} sec'
+        #     elif estimated_time < 3600:
+        #         estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
+        #     else:
+        #         estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
+        # if estimated_time < 60:
+        #     progress = f'{int(progress_time):3d}'
+        # elif estimated_time < 3600:
+        #     progress = f'{progress_time / 60:.3f}'[:3]
+        # else:
+        #     progress = f'{progress_time / 3600:.1f}'
+        #
+        # p_char = int(frac_pick * 64)
+        # progress_text = f'\r {progress}/{estimated_time_text} '
+        # progress_text += '.' * p_char
+        # progress_text += MOUSE
+        # progress_text += ' ' * (60-p_char)
+        # cheese_truncation = 0
+        # if p_char > 57:
+        #     cheese_truncation = p_char - 57
+        # progress_text += '[oo]'[cheese_truncation:]
         print(progress_text, end='', flush=True)
         time.sleep(1)
     print('')
