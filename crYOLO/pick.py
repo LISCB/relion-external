@@ -136,7 +136,7 @@ def _monitor_preprocessing(num, stop):
     prior_preproc_count = 0
     start_preproc_time = time.time()
     print(' Preprocessing ...', flush=True)
-    print(' 000/??? sec ~~(,_,">                                                          [oo]', end='', flush=True)
+    print(' 000/??? sec ~~( ϵ:>                                                           [oo]', end='', flush=True)
     while (not stop()) and (frac_preproc < 1):
         output = subprocess.run('find filtered_tmp -name "*.mrc"',
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
