@@ -168,13 +168,6 @@ def _monitor_preprocessing(num, stop):
             else:
                 estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
 
-        # progress_text = f'\r {progress}/{estimated_time_text} '
-        # progress_text += '.' * int(frac_preproc * 59)
-        # progress_text += MOUSE
-        # progress_text += ' ' * (int((1 - frac_preproc) * 59) - 4)
-        # progress_text += '[oo]'
-        # print(progress_text, end='', flush=True)
-        # time.sleep(1)
         p_char = int(frac_preproc * 64)
         progress_text = f'\r {progress}/{estimated_time_text} '
         progress_text += '.' * p_char
