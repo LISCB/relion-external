@@ -14,7 +14,7 @@ import _thread
 
 
 PROGRAM_NAME = 'cryolo'
-EXECUTABLE = '/net/prog/anaconda3/envs/cryolo/bin/python /net/prog/anaconda3/envs/cryolo/bin/cryolo_predict.py'
+EXECUTABLE = '/net/prog/anaconda3/envs/cryolo-gpu/bin/python /net/prog/anaconda3/envs/cryolo/bin/cryolo_predict.py'
 CRYOLO_PHOSNET_LOCATION = '/net/common/cryolo/gmodel_phosnet_202002_N63.h5'
 CRYOLO_PHOSNET_NN_LOCATION = '/net/common/cryolo/gmodel_phosnet_202003_nn_N63.h5'
 JANNI_LOCATION = '/net/common/janni/gmodel_janni_20190703.h5'
@@ -136,7 +136,7 @@ def _monitor_preprocessing(num, stop):
     prior_preproc_count = 0
     start_preproc_time = time.time()
     print(' Preprocessing ...', flush=True)
-    print(' 000/??? sec ~~(,_,">                                                          [oo]', end='\M', flush=True)
+    print(' 000/??? sec ~~(,_,">                                                          [oo]', end='', flush=True)
     while (not stop()) and (frac_preproc < 1):
         output = subprocess.run('find filtered_tmp -name "*.mrc"',
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -168,25 +168,36 @@ def _monitor_preprocessing(num, stop):
             else:
                 estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
 
-        progress_text = f' {progress}/{estimated_time_text} '
-        progress_text += '.' * int(frac_preproc * 63)
+        # progress_text = f'\r {progress}/{estimated_time_text} '
+        # progress_text += '.' * int(frac_preproc * 59)
+        # progress_text += MOUSE
+        # progress_text += ' ' * (int((1 - frac_preproc) * 59) - 4)
+        # progress_text += '[oo]'
+        # print(progress_text, end='', flush=True)
+        # time.sleep(1)
+        p_char = int(frac_preproc * 64)
+        progress_text = f'\r {progress}/{estimated_time_text} '
+        progress_text += '.' * p_char
         progress_text += MOUSE
-        progress_text += ' ' * ((int(1 - frac_preproc) * 63) - 4)
-        print(progress_text, end='\M', flush=True)
+        progress_text += ' ' * (60-p_char)
+        cheese_truncation = 0
+        if p_char > 57:
+            cheese_truncation = p_char - 57
+        progress_text += '[oo]'[cheese_truncation:]
+        print(progress_text, end='', flush=True)
         time.sleep(1)
 
     print('')
 
 
 def _monitor_picking(stop):
-    abort_file_path = os.path.join(TOP_DIR, relion_job_dir, 'RELION_JOB_ABORT_NOW')
     total_preproc = len(os.listdir('input'))
     frac_picked = 0
     prior_pick_count = 0
     start_pick_time = time.time()
     print(' Autopicking ...', flush=True)
-    print(' 000/??? sec ~~(,_,">                                                          [oo]',
-          end='\M')
+    print(' 000/??? sec ~~( ϵ:>                                                           [oo]',
+          end='', flush=True)
     while (not stop()) and (frac_picked < 1):
         output = subprocess.run('find output/CBOX -name "*.cbox"',
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -216,11 +227,16 @@ def _monitor_picking(stop):
         else:
             progress = f'{progress_time / 3600:.1f}'
 
-        progress_text = f' {progress}/{estimated_time_text} '
-        progress_text += '.' * int(frac_pick * 63)
+        p_char = int(frac_pick * 64)
+        progress_text = f'\r {progress}/{estimated_time_text} '
+        progress_text += '.' * p_char
         progress_text += MOUSE
-        progress_text += ' ' * ((int(1 - frac_pick) * 63) - 4)
-        print(progress_text, end='\M', flush=True)
+        progress_text += ' ' * (60-p_char)
+        cheese_truncation = 0
+        if p_char > 57:
+            cheese_truncation = p_char - 57
+        progress_text += '[oo]'[cheese_truncation:]
+        print(progress_text, end='', flush=True)
         time.sleep(1)
     print('')
 
