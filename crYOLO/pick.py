@@ -338,8 +338,6 @@ _rlnCoordinateY #2
 _rlnAutopickFigureOfMerit #3
 _rlnClassNumber #4
 _rlnAnglePsi #5
-_cryoloEstSizeX #6
-_cryoloEstSizeY #7
 '''
     return (star_header + loop_body, sizes)
 
