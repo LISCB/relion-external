@@ -182,31 +182,6 @@ def _monitor_preprocessing(num, stop):
         progress_time = time.time() - start_preproc_time
         estimated_time = int(progress_time / frac_preproc)
         progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_preproc)
-        # if estimated_time < 60:
-        #     progress = f'{int(progress_time):3d}'
-        # elif estimated_time < 3600:
-        #     progress = f'{progress_time / 60:.3f}'[:3]
-        # else:
-        #     progress = f'{progress_time / 3600:.1f}'
-        # if frac_preproc < 0.1:
-        #     estimated_time_text = '??? sec'
-        # else:
-        #     if estimated_time < 60:
-        #         estimated_time_text = f'{estimated_time:3d} sec'
-        #     elif estimated_time < 3600:
-        #         estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
-        #     else:
-        #         estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
-        #
-        # p_char = int(frac_preproc * 64)
-        # progress_text = f'\r {progress}/{estimated_time_text} '
-        # progress_text += '.' * p_char
-        # progress_text += MOUSE
-        # progress_text += ' ' * (60-p_char)
-        # cheese_truncation = 0
-        # if p_char > 57:
-        #     cheese_truncation = p_char - 57
-        # progress_text += '[oo]'[cheese_truncation:]
         print(progress_text, end='', flush=True)
         time.sleep(1)
 
@@ -235,32 +210,6 @@ def _monitor_picking(stop):
         progress_time = time.time() - start_pick_time
         estimated_time = int(progress_time / frac_pick)
         progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_pick)
-        #
-        # if frac_pick < 0.1:
-        #     estimated_time_text = '??? sec'
-        # else:
-        #     if estimated_time < 60:
-        #         estimated_time_text = f'{estimated_time:3d} sec'
-        #     elif estimated_time < 3600:
-        #         estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
-        #     else:
-        #         estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
-        # if estimated_time < 60:
-        #     progress = f'{int(progress_time):3d}'
-        # elif estimated_time < 3600:
-        #     progress = f'{progress_time / 60:.3f}'[:3]
-        # else:
-        #     progress = f'{progress_time / 3600:.1f}'
-        #
-        # p_char = int(frac_pick * 64)
-        # progress_text = f'\r {progress}/{estimated_time_text} '
-        # progress_text += '.' * p_char
-        # progress_text += MOUSE
-        # progress_text += ' ' * (60-p_char)
-        # cheese_truncation = 0
-        # if p_char > 57:
-        #     cheese_truncation = p_char - 57
-        # progress_text += '[oo]'[cheese_truncation:]
         print(progress_text, end='', flush=True)
         time.sleep(1)
     print('')
