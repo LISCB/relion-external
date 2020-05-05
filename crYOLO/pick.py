@@ -14,7 +14,7 @@ import _thread
 
 
 PROGRAM_NAME = 'cryolo'
-EXECUTABLE = '/net/prog/anaconda3/envs/cryolo-gpu/bin/python /net/prog/anaconda3/envs/cryolo/bin/cryolo_predict.py'
+EXECUTABLE = '/net/prog/anaconda3/envs/cryolo-gpu/bin/cryolo_predict.py'
 CRYOLO_PHOSNET_LOCATION = '/net/common/cryolo/gmodel_phosnet_202002_N63.h5'
 CRYOLO_PHOSNET_NN_LOCATION = '/net/common/cryolo/gmodel_phosnet_202003_nn_N63.h5'
 JANNI_LOCATION = '/net/common/janni/gmodel_janni_20190703.h5'
@@ -69,10 +69,10 @@ def get_input_micrograph_paths(starfile_location):
     '''
 
     #TODO: use default callable and add commandline parameter to specify
-    rlnMicrographName = subprocess.check_output(f'relion_star_printtable {starfile_location} data_micrographs _rlnMicrographName',
+    rlnMicrographNames = subprocess.check_output(f'relion_star_printtable {starfile_location} data_micrographs _rlnMicrographName',
                                                 universal_newlines=True, shell=True)
     micrograph_paths = defaultdict(list)
-    for micrograph_path in rlnMicrographName.splitlines():
+    for micrograph_path in rlnMicrographNames.splitlines():
         pth, fname = os.path.split(micrograph_path.strip())
         micrograph_paths[pth].append(fname)
     return micrograph_paths
