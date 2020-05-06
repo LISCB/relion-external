@@ -407,6 +407,9 @@ if __name__ == '__main__':
         print('Cryolo Wrapper for Relion v3.1', flush=True)
         print('Written by TJ Ragan (LISCB, University of Leicester)\n', flush=True)
 
+        print('crYOLO Version: 1.6.1', flush=True)
+        print('Wrapper Version: 0.3\n', flush=True)
+
         print(f'Print compute info here.', flush=True)
         print(f'=================', flush=True)
 
@@ -426,7 +429,7 @@ if __name__ == '__main__':
 
 
         Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
-        print(f' Done!')
+        print(f' Done!\n')
 
     except Exception as e:
         if os.path.exists(os.path.join(relion_job_dir, 'RELION_JOB_ABORT_NOW')):
