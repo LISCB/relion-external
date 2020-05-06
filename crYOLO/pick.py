@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument('--gpu_fraction', type=float, default=1.0, help='Fraction of GPU memory to use.  (Default: 1.0)')
     parser.add_argument('--otf', action='store_true', help='On-The-Fly pre-filtering.  Not currently multi-threaded. (Default: off)')
     parser.add_argument('--overwrite', action='store_true', help='Force complete re-picking.  (default: off)')
-    parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: Use all available)")
+    parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: 1 per GPU)")
 
     args = parser.parse_args()
     if not (args.o and args.in_mics):
@@ -408,7 +408,10 @@ if __name__ == '__main__':
             except FileNotFoundError: pass
 
         jobs = max(GPU_COUNT, 1)
-        threads_per_job = max(int(args.j/jobs), 1)
+        if jobs == 1:
+            threads_per_job = -1
+        else:
+            threads_per_job = max(int(args.j/jobs), 1)
 
         cryolo_params = {'weights_location': CRYOLO_PHOSNET_LOCATION,
                          'threshold': args.threshold,
