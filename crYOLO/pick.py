@@ -10,20 +10,28 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-import _thread
+import signal
+from functools import partial
 
 
 PROGRAM_NAME = 'cryolo'
-EXECUTABLE = '/net/prog/anaconda3/envs/cryolo-gpu/bin/cryolo_predict.py'
+CPU_EXECUTABLE = '/net/prog/anaconda3/envs/cryolo/bin/cryolo_predict.py'
+GPU_EXECUTABLE = '/net/prog/anaconda3/envs/cryolo-gpu/bin/cryolo_predict.py'
 CRYOLO_PHOSNET_LOCATION = '/net/common/cryolo/gmodel_phosnet_202002_N63.h5'
 CRYOLO_PHOSNET_NN_LOCATION = '/net/common/cryolo/gmodel_phosnet_202003_nn_N63.h5'
 JANNI_LOCATION = '/net/common/janni/gmodel_janni_20190703.h5'
 
 SUFFIX_STAR_FILENAME = f'coords_suffix_{PROGRAM_NAME}.star'
 
+
+gpu_count = len(subprocess.run('lspci | grep "VGA compatible controller: NVIDIA"', shell=True,
+                           stdout=subprocess.PIPE).stdout.decode().splitlines())
+EXECUTABLE = GPU_EXECUTABLE if gpu_count else CPU_EXECUTABLE
+
+
 TOP_DIR = os.getcwd()
 # MOUSE = r'~~(,_,">'
-MOUSE = r'~~( ϵ:> '
+MOUSE = r'~~( ϵ:>'
 
 
 class StoppableThread(threading.Thread):
@@ -85,10 +93,17 @@ def setup_temp_dir(relion_job_dir, micrograph_paths, force=False):
         relion_output_directory = os.path.join(relion_job_dir, relion_micrograph_directory)
         cryolo_working_directory = os.path.join(relion_output_directory, 'crYOLO')
         input_symlinks_dir = os.path.join(cryolo_working_directory, 'input')
+        log_dir = os.path.join(cryolo_working_directory, 'logs', 'cmdlogs')
         if force:
             shutil.rmtree(relion_output_directory, ignore_errors=True)
         else:
-            shutil.rmtree(input_symlinks_dir, ignore_errors=True)
+            try:
+                lastlog = glob.glob(os.path.join(log_dir, '*.txt'))
+                lastlog = sorted(lastlog, key=os.path.getmtime)[-1]
+                old_path_suffix = os.path.splitext(lastlog.split('-')[-1])[0]
+                shutil.move(cryolo_working_directory, cryolo_working_directory + '-' + old_path_suffix)
+            except IndexError:
+                pass
         os.makedirs(input_symlinks_dir, exist_ok=True)
         source_directory = os.path.join(TOP_DIR, k)
         for m in v:
@@ -147,83 +162,82 @@ def _make_updated_progress_bar(progress_time, estimated_time, frac_done):
         else:
             estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
 
-    p_char = int(frac_done * 64)
+    p_char = int(frac_done * 62)
     progress_text = f'\r {progress}/{estimated_time_text} '
     progress_text += '.' * p_char
     progress_text += MOUSE
-    progress_text += ' ' * (60 - p_char)
+    progress_text += ' ' * (58 - p_char)
     cheese_truncation = 0
-    if p_char > 57:
-        cheese_truncation = p_char - 57
+    if p_char > 55:
+        cheese_truncation = p_char - 55
     progress_text += '[oo]'[cheese_truncation:]
     return progress_text
 
 
-def _monitor_preprocessing(num, stop):
-    initial_preproc = None
-    frac_preproc = 0
-    prior_preproc_count = 0
-    start_preproc_time = time.time()
-    print(' Preprocessing ...', flush=True)
-    print(f' 000/??? sec {MOUSE}                                                          [oo]', end='', flush=True)
-    while (not stop()) and (frac_preproc < 1):
-        output = subprocess.run('find filtered_tmp -name "*.mrc"',
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                shell=True).stdout.decode().splitlines()
-        if initial_preproc is None:
-            initial_preproc = set(output)
-        preproc_count = len(set(output))
-        if preproc_count == prior_preproc_count:
-            time.sleep(1)
-            continue
-        prior_preproc_count = preproc_count
+def check_abort_signal(abs_job_dir):
+    if os.path.exists(os.path.join(abs_job_dir, 'RELION_JOB_ABORT_NOW')):
+        return True
+    return False
 
-        frac_preproc = len(set(output) - initial_preproc) / num
-        progress_time = time.time() - start_preproc_time
+
+def _update_preproc_progress_bar(kwargs=None):
+    if kwargs is None:
+        kwargs = {'count': len(os.listdir('input')),
+                  'start_preproc_time': time.time(),
+                  'initial_preproc_count': None,
+                  'prior_preproc_count': 0
+                  }
+        print(' Preprocessing ...', flush=True)
+        print(f' 000/??? sec {MOUSE}                                                          [oo]',
+              end='', flush=True)
+    output = subprocess.run('find filtered_tmp -name "*.mrc"',
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=True).stdout.decode().splitlines()
+    if kwargs['initial_preproc_count'] is None:
+        kwargs['initial_preproc_count'] = set(output)
+    preproc_count = len(set(output))
+    if preproc_count > kwargs['prior_preproc_count']:
+        kwargs['prior_preproc_count'] = preproc_count
+        frac_preproc = max(len(set(output) - kwargs['initial_preproc_count']) / kwargs['count'], 0.000001)
+        progress_time = time.time() - kwargs['start_preproc_time']
         estimated_time = int(progress_time / frac_preproc)
         progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_preproc)
         print(progress_text, end='', flush=True)
-        time.sleep(1)
+    if preproc_count == kwargs['count']:
+        print('')
+        return _update_pick_progress_bar
+    else:
+        return lambda: _update_preproc_progress_bar(kwargs)
 
-    print('')
 
-
-def _monitor_picking(stop):
-    total_preproc = len(os.listdir('input'))
-    frac_picked = 0
-    prior_pick_count = 0
-    start_pick_time = time.time()
-    print(' Autopicking ...', flush=True)
-    print(f' 000/??? sec {MOUSE}                                                          [oo]',
-          end='', flush=True)
-    while (not stop()) and (frac_picked < 1):
-        output = subprocess.run('find output/CBOX -name "*.cbox"',
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                shell=True).stdout.decode().splitlines()
-
-        pick_count = len(output)
-        if pick_count == prior_pick_count:
-            time.sleep(1)
-            continue
-        prior_pick_count = pick_count
-        frac_pick = pick_count / total_preproc
-        progress_time = time.time() - start_pick_time
-        estimated_time = int(progress_time / frac_pick)
-        progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_pick)
+def _update_pick_progress_bar(kwargs=None):
+    if kwargs is None:
+        kwargs = {'count': len(os.listdir('input')),
+                  'start_pick_time': time.time(),
+                  'initial_picks': None,
+                  'prior_pick_count': 0
+                  }
+        print(' Autopicking ...', flush=True)
+        print(f' 000/??? sec {MOUSE}                                                          [oo]',
+              end='', flush=True)
+    output = subprocess.run('find output/CBOX -name "*.cbox"',
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=True).stdout.decode().splitlines()
+    if kwargs['initial_picks'] is None:
+        kwargs['initial_picks'] = set(output)
+    pick_count = len(set(output))
+    if pick_count > kwargs['prior_pick_count']:
+        kwargs['prior_pick_count'] = pick_count
+        frac_picked = max(len(set(output) - kwargs['initial_picks']) / kwargs['count'], 0.000001)
+        progress_time = time.time() - kwargs['start_pick_time']
+        estimated_time = int(progress_time / frac_picked)
+        progress_text = _make_updated_progress_bar(progress_time, estimated_time, frac_picked)
         print(progress_text, end='', flush=True)
-        time.sleep(1)
-    print('')
+    return lambda: _update_pick_progress_bar(kwargs)
 
 
-def monitor(num, stop, otf=False):
-    if num == 0:
-        return
-    if not otf:
-        _monitor_preprocessing(num, stop)
-    _monitor_picking(stop)
-
-
-def run_cryolo(weights_location=CRYOLO_PHOSNET_LOCATION, **kwargs):
+def run_cryolo(**kwargs):
+    weights_location = kwargs.get('weights_location', CRYOLO_PHOSNET_LOCATION)
     cryolo_cmd = f'{EXECUTABLE} -c cryolo_config.json --weights {weights_location} --input input --output output'
     for opt in ['num_cpu', 'gpu_fraction', 'prediction_batch_size']:
         value = kwargs.get(opt)
@@ -232,34 +246,31 @@ def run_cryolo(weights_location=CRYOLO_PHOSNET_LOCATION, **kwargs):
     if kwargs.get('otf'):
         cryolo_cmd += f" --otf"
     cryolo_cmd += ' >cryolo.out 2>cryolo.err'
-    try:
-        #TODO: convert this to a thread-pool, launch a thread to watch for abort and kill others if found
-        input_micrograph_count = len(os.listdir('input'))
-        stop_thread = False
-        t = threading.Thread(target=monitor, args=(input_micrograph_count, lambda : stop_thread, kwargs.get('otf', False)))
-        t.start()
-        subprocess.run(cryolo_cmd, check=True, shell=True)
-        stop_thread = True
-        t.join()
-    except subprocess.CalledProcessError as e:
-        with open('cryolo.err') as f:
-            last_line = f.readlines()[-1].strip()
-            if not last_line == 'No valid image in your specified input':
-                raise e
+    return subprocess.Popen(cryolo_cmd, shell=True)
 
 
-def run_all_cryolo(micrograph_paths, **kwargs):
+def run_all_cryolo(relion_job_dir, micrograph_paths, num_jobs=1, **kwargs):
     print(' Autopicking with crYOLO ...', flush=True)
+    abs_job_dir = os.path.abspath(relion_job_dir)
+    cwd = os.getcwd()
+    update_progress_bar = _update_preproc_progress_bar
+
     for k in micrograph_paths.keys():
-        relion_micrograph_directory = os.path.basename(k)
-        cryolo_working_directory = os.path.join(relion_job_dir, relion_micrograph_directory, 'crYOLO')
+        relion_micrograph_subdirectory = os.path.basename(k)
+        cryolo_working_directory = os.path.join(abs_job_dir, relion_micrograph_subdirectory, 'crYOLO')
         try:
-            cwd = os.getcwd()
             os.chdir(cryolo_working_directory)
-            run_cryolo(**kwargs)
-        except subprocess.CalledProcessError as e:
-            pass
-            #TODO: remove RELION_JOB_ABORT_NOW and touch RELION_JOB_EXIT_ABORTED (iff RELION_JOB_ABORT_NOW exists)
+            count = len(os.listdir('input'))
+            if count < 1:
+                continue
+            proc = run_cryolo(**kwargs)
+            while proc.poll() is None:
+                update_progress_bar = update_progress_bar()
+                abort = check_abort_signal(abs_job_dir)
+                if abort:
+                    os.kill(proc.pid, signal.SIGTERM)
+                    raise Exception('Relion RELION_JOB_ABORT_NOW file seen. Terminating.')
+                time.sleep(1)
         finally:
             os.chdir(cwd)
 
@@ -272,7 +283,6 @@ def cbox2star(cbox_path, threshold=0):
         for line in f:
             splitline = line.split()
             if float(splitline[4]) >= threshold:
-                # picks.append(f' {splitline[0]:>7} {splitline[1]:>7} {splitline[4]:>12}  0  0.000000  {splitline[5]:>5}  {splitline[5]:>5}')
                 picks.append(f' {splitline[0]:>7} {splitline[1]:>7} {splitline[4]:>12}  0  0.000000')
                 sizes.append((int(splitline[5]), int(splitline[6])))
     loop_body = '\n'.join(picks)
@@ -293,7 +303,7 @@ _rlnAnglePsi #5
 
 def assimilate_results(relion_job_dir, micrograph_paths, remove_temp_images=True, threshold=0, **kwargs):
     postfix_ID = ''
-    print(' Assimilating results ...', flush=True)
+    print('\n Assimilating results ...', flush=True)
     sizes = []
     for k in micrograph_paths.keys():
         relion_micrograph_directory = os.path.basename(k)
@@ -304,17 +314,26 @@ def assimilate_results(relion_job_dir, micrograph_paths, remove_temp_images=True
             postfix_ID = os.path.splitext(src)[0].split('command_predict_')[-1]
         for src in glob.glob(os.path.join(cryolo_working_directory, 'output', 'DISTR', '*')):
             shutil.copy2(src, relion_output_directory)
-        for src in glob.glob(os.path.join(cryolo_working_directory, 'output', 'CBOX', '*')):
-            prefix = os.path.splitext(os.path.basename(src))[0]
+        output_dirs = sorted(glob.glob(os.path.join(cryolo_working_directory+'*')),
+                             key=os.path.getmtime)
+        output_cbox_files = {}
+        for output_dir in output_dirs:
+            for cbox_file in glob.glob(os.path.join(output_dir, 'output', 'CBOX', '*.cbox')):
+                output_cbox_files[os.path.basename(cbox_file)] = output_dir
+        for f_name, d_name in output_cbox_files.items():
+            prefix = os.path.splitext(f_name)[0]
             dest = os.path.join(relion_output_directory, prefix + f'_{PROGRAM_NAME}.star')
             with open(dest, 'w') as f:
-                star_text, s = cbox2star(src, threshold=threshold)
+                star_text, s = cbox2star(os.path.join(d_name, 'output', 'CBOX', f_name), threshold=threshold)
                 sizes += s
                 f.write(star_text + '\n')
-        shutil.copy2(os.path.join(cryolo_working_directory, 'cryolo.out'),
-                     os.path.join(relion_output_directory, f'cryolo_{postfix_ID}.out'))
-        shutil.copy2(os.path.join(cryolo_working_directory, 'cryolo.err'),
-                     os.path.join(relion_output_directory, f'cryolo_{postfix_ID}.err'))
+        try:
+            shutil.copy2(os.path.join(cryolo_working_directory, 'cryolo.out'),
+                         os.path.join(relion_output_directory, f'cryolo_{postfix_ID}.out'))
+            shutil.copy2(os.path.join(cryolo_working_directory, 'cryolo.err'),
+                         os.path.join(relion_output_directory, f'cryolo_{postfix_ID}.err'))
+        except FileNotFoundError:
+            pass
         if remove_temp_images:
             shutil.rmtree(os.path.join(cryolo_working_directory, 'filtered_tmp'), ignore_errors=True)
 
@@ -332,7 +351,7 @@ def write_relion_star_final(relion_job_dir, input_star_file):
         f.write(f'{os.path.join(relion_job_dir, SUFFIX_STAR_FILENAME)}    2\n')
 
 
-def print_results_summary(relion_job_dir, micrograph_paths, cryolo_postfix_ID, particle_sizes=()):
+def print_results_summary(relion_job_dir, particle_sizes):
     for k in micrograph_paths.keys():
         relion_micrograph_directory = os.path.basename(k)
         relion_output_directory = os.path.join(relion_job_dir, relion_micrograph_directory)
@@ -341,7 +360,7 @@ def print_results_summary(relion_job_dir, micrograph_paths, cryolo_postfix_ID, p
                                 shell=True).stdout.decode().splitlines()[:-1]
         kept_particle_count = 0
         for line in wc:
-            kept_particle_count += int(line.strip().split()[0])
+            kept_particle_count += (int(line.strip().split()[0]) - 11)  #11 header lines per star file
         print(f' Total number of particles from {len(wc)} micrographs is {kept_particle_count}')
         if len(particle_sizes) > 0:
             print(f' i.e. on average there were {int(round(kept_particle_count/len(wc)))} particles per micrograph')
@@ -398,18 +417,22 @@ if __name__ == '__main__':
         micrograph_paths = get_input_micrograph_paths(input_star_file)
         setup_temp_dir(relion_job_dir, micrograph_paths, args.overwrite)
         make_config_files(relion_job_dir, micrograph_paths, cryolo_params)
+        run_all_cryolo(relion_job_dir, micrograph_paths, **cryolo_params)
 
-        run_all_cryolo(micrograph_paths, **cryolo_params)
+        postfix_ID, particle_sizes, = assimilate_results(relion_job_dir, micrograph_paths, remove_temp_images=True, **cryolo_params)
+        print_results_summary(relion_job_dir, particle_sizes)
 
-        cryolo_postfix_ID, particle_sizes = assimilate_results(relion_job_dir, micrograph_paths, remove_temp_images=True, **cryolo_params)
         write_relion_star_final(relion_job_dir, input_star_file)
 
-        print_results_summary(relion_job_dir, micrograph_paths, cryolo_postfix_ID, particle_sizes)
 
         Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
         print(f' Done!')
 
     except Exception as e:
-        Path('RELION_JOB_EXIT_FAILURE').touch()
-        raise e
+        if os.path.exists(os.path.join(relion_job_dir, 'RELION_JOB_ABORT_NOW')):
+            os.remove(os.path.join(relion_job_dir, 'RELION_JOB_ABORT_NOW'))
+            Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_ABORTED')).touch()
+        else:
+            Path('RELION_JOB_EXIT_FAILURE').touch()
+            raise e
 
