@@ -240,7 +240,7 @@ def _update_pick_progress_bar(kwargs=None):
 
 def run_cryolo(input_dir, **kwargs):
     weights_location = kwargs.get('weights_location', CRYOLO_PHOSNET_LOCATION)
-    cryolo_cmd = f'{EXECUTABLE} --conf cryolo_config.json --weights {weights_location} --input {input_dir} --output output'
+    cryolo_cmd = f'{EXECUTABLE} --write_empty --conf cryolo_config.json --weights {weights_location} --input {input_dir} --output output'
     for opt in ['num_cpu', 'gpu_fraction', 'prediction_batch_size']:
         value = kwargs.get(opt)
         if value is not None:
