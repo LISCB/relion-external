@@ -47,8 +47,18 @@ def parse_args():
     parser.add_argument('--prediction_batch_size', type=int, default=3, help='Images per batch, lower values will help with memory issues.  (Default: 3)')
     parser.add_argument('--gpu_fraction', type=float, default=1.0, help='Fraction of GPU memory to use.  (Default: 1.0)')
     parser.add_argument('--otf', action='store_true', help='On-The-Fly pre-filtering.  Not currently multi-threaded. (Default: off)')
+    parser.add_argument('--norm_margin', type=float, default=0.0, help='Relative margin size for normalization. (Default: 0)')
     parser.add_argument('--overwrite', action='store_true', help='Force complete re-picking.  (default: off)')
     parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: 1 per GPU)")
+    parser.add_argument('--filament', action='store_true', help='Use filament mode.  (default: off)')
+    parser.add_argument('--nosplit', action='store_true', help='The filament mode does not split to curved filaments.  (default: off)')
+    parser.add_argument('--nomerging', action='store_true', help='The filament mode does not merge filaments.  (default: off)')
+    parser.add_argument('--filament_width', type=int, required=False, help='Filament width in pixels.')
+    parser.add_argument('--mask_width', type=int, default=100, help='Mask width in pixels.')
+    parser.add_argument('--box_distance', type=int, default=0, help='Distance in pixel between two boxes.')
+    parser.add_argument('--minimum_number_boxes', type=int, default=0, help='Minimum number of boxes per filament.')
+    parser.add_argument('--search_range_factor', type=float, default=1.41,
+                        help='The search range for connecting boxes is the box size times this factor.')
 
     args = parser.parse_args()
     if not (args.o and args.in_mics):
@@ -241,12 +251,15 @@ def _update_pick_progress_bar(kwargs=None):
 def run_cryolo(input_dir, **kwargs):
     weights_location = kwargs.get('weights_location', CRYOLO_PHOSNET_LOCATION)
     cryolo_cmd = f'{EXECUTABLE} --write_empty --conf cryolo_config.json --weights {weights_location} --input {input_dir} --output output'
-    for opt in ['num_cpu', 'gpu_fraction', 'prediction_batch_size']:
+    for opt in ['num_cpu', 'gpu_fraction', 'prediction_batch_size',
+                'nosplit', 'nomerging','filament_width', 'mask_width', 'box_distance', 'minimum_number_boxes', 'search_range_factor']:
         value = kwargs.get(opt)
         if value is not None:
             cryolo_cmd += f" --{opt} {value}"
     if kwargs.get('otf'):
         cryolo_cmd += " --otf"
+    if kwargs.get('filament'):
+        cryolo_cmd += " --filament"
     try:
         gpu_number = int(input_dir[-1])
         cryolo_cmd += f" --gpu {gpu_number}"
@@ -419,8 +432,17 @@ if __name__ == '__main__':
                          'gpu_fraction': args.gpu_fraction,
                          'prediction_batch_size': args.prediction_batch_size,
                          'otf': args.otf,
+                         'norm_margin': args.norm_margin,
                          }
-
+        if args.filament:
+            cryolo_params['filament'] = True
+            cryolo_params['nosplit'] = args.nosplit
+            cryolo_params['nomerging'] = args.nomerging
+            cryolo_params['filament_width'] = args.filament_width
+            cryolo_params['mask_width'] = args.mask_width
+            cryolo_params['box_distance'] = args.box_distance
+            cryolo_params['minimum_number_boxes'] = args.minimum_number_boxes
+            cryolo_params['search_range_factor'] = args.search_range_factor
 
         print('Cryolo Wrapper for Relion v3.1', flush=True)
         print('Written by TJ Ragan (LISCB, University of Leicester)\n', flush=True)
