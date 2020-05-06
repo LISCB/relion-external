@@ -7,11 +7,9 @@ import sys
 import os
 import argparse
 import subprocess
-import threading
 import time
 from pathlib import Path
 import signal
-from functools import partial
 
 
 PROGRAM_NAME = 'cryolo'
@@ -23,30 +21,21 @@ JANNI_LOCATION = '/net/common/janni/gmodel_janni_20190703.h5'
 
 SUFFIX_STAR_FILENAME = f'coords_suffix_{PROGRAM_NAME}.star'
 
+HW_GPU_LIST = subprocess.run('lspci | grep "VGA compatible controller: NVIDIA"', shell=True,
+                               stdout=subprocess.PIPE).stdout.decode().splitlines()
+SLURM_GPU_IDS = os.environ.get('CUDA_VISIBLE_DEVICES')
+if SLURM_GPU_IDS:
+    GPU_IDS = [int(g) for g in SLURM_GPU_IDS.split(',')]
+else:
+    GPU_IDS = list(range(len(HW_GPU_LIST)))
+GPU_COUNT = len(GPU_IDS)
 
-gpu_count = len(subprocess.run('lspci | grep "VGA compatible controller: NVIDIA"', shell=True,
-                           stdout=subprocess.PIPE).stdout.decode().splitlines())
-EXECUTABLE = GPU_EXECUTABLE if gpu_count else CPU_EXECUTABLE
+EXECUTABLE = GPU_EXECUTABLE if GPU_COUNT else CPU_EXECUTABLE
 
 
 TOP_DIR = os.getcwd()
 # MOUSE = r'~~(,_,">'
 MOUSE = r'~~( ϵ:>'
-
-
-class StoppableThread(threading.Thread):
-    """Thread class with a stop() method. The thread itself has to check
-    regularly for the stopped() condition."""
-
-    def __init__(self,  *args, **kwargs):
-        super(StoppableThread, self).__init__(*args, **kwargs)
-        self._stop_event = threading.Event()
-
-    def stop(self):
-        self._stop_event.set()
-
-    def stopped(self):
-        return self._stop_event.is_set()
 
 
 def parse_args():
@@ -59,7 +48,7 @@ def parse_args():
     parser.add_argument('--gpu_fraction', type=float, default=1.0, help='Fraction of GPU memory to use.  (Default: 1.0)')
     parser.add_argument('--otf', action='store_true', help='On-The-Fly pre-filtering.  Not currently multi-threaded. (Default: off)')
     parser.add_argument('--overwrite', action='store_true', help='Force complete re-picking.  (default: off)')
-    parser.add_argument('--j', metavar="NUM_CPU", type=int, default=-1, help="Threads. (Default: Use all available)")
+    parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: Use all available)")
 
     args = parser.parse_args()
     if not (args.o and args.in_mics):
@@ -86,9 +75,9 @@ def get_input_micrograph_paths(starfile_location):
     return micrograph_paths
 
 
-def setup_temp_dir(relion_job_dir, micrograph_paths, force=False):
+def setup_temp_dir(relion_job_dir, micrograph_paths, jobs=1, force=False):
     print(' + Running crYOLO on the following micrographs:', flush=True)
-    for k,v in micrograph_paths.items():
+    for k, v in micrograph_paths.items():
         relion_micrograph_directory = os.path.basename(k)
         relion_output_directory = os.path.join(relion_job_dir, relion_micrograph_directory)
         cryolo_working_directory = os.path.join(relion_output_directory, 'crYOLO')
@@ -104,23 +93,25 @@ def setup_temp_dir(relion_job_dir, micrograph_paths, force=False):
                 shutil.move(cryolo_working_directory, cryolo_working_directory + '-' + old_path_suffix)
             except IndexError:
                 pass
-        os.makedirs(input_symlinks_dir, exist_ok=True)
+        if jobs == 1:
+            os.makedirs(input_symlinks_dir, exist_ok=True)
+        else:
+            for j in range(jobs):
+                os.makedirs(input_symlinks_dir + f'_{j}', exist_ok=True)
         source_directory = os.path.join(TOP_DIR, k)
-        for m in v:
+        for i, m in enumerate(v):
             if not force:
                 prefix = os.path.splitext(m)[0]
                 dest_star = os.path.join(relion_output_directory, prefix + f'_{PROGRAM_NAME}.star')
                 if os.path.isfile(dest_star):
                     continue
-
             src = os.path.join(source_directory, m)
-            dest = os.path.join(input_symlinks_dir, m)
+            dest = os.path.join(input_symlinks_dir + f'_{i%jobs}', m)
             print(f'   * {os.path.join(k,m)}', flush=True)
             try:
                 os.symlink(src, dest)
             except FileExistsError:
                 pass
-
 
 def make_config_files(relion_job_dir, micrograph_paths, cryolo_params):
     cryolo_config = '''{
@@ -148,19 +139,22 @@ def make_config_files(relion_job_dir, micrograph_paths, cryolo_params):
 def _make_updated_progress_bar(progress_time, estimated_time, frac_done):
     if estimated_time < 60:
         progress = f'{int(progress_time):3d}'
+        units = 'sec'
     elif estimated_time < 3600:
         progress = f'{progress_time / 60:.3f}'[:3]
+        units = 'min'
     else:
         progress = f'{progress_time / 3600:.1f}'
-    if frac_done < 0.1:
-        estimated_time_text = '??? sec'
+        units = 'hrs'
+    if frac_done < 0.01:
+        estimated_time_text = f'??? {units}'
     else:
         if estimated_time < 60:
-            estimated_time_text = f'{estimated_time:3d} sec'
+            estimated_time_text = f'{estimated_time:3d} {units}'
         elif estimated_time < 3600:
-            estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + ' min'
+            estimated_time_text = f'{estimated_time / 60:.3f}'[:3] + f' {units}'
         else:
-            estimated_time_text = f'{estimated_time / 3600:.1f}' + ' hrs'
+            estimated_time_text = f'{estimated_time / 3600:.1f}' + f' {units}'
 
     p_char = int(frac_done * 62)
     progress_text = f'\r {progress}/{estimated_time_text} '
@@ -182,7 +176,11 @@ def check_abort_signal(abs_job_dir):
 
 def _update_preproc_progress_bar(kwargs=None):
     if kwargs is None:
-        kwargs = {'count': len(os.listdir('input')),
+        count = 0
+        input_dirs = glob.glob('input*')
+        for input_dir in input_dirs:
+            count += len(os.listdir(input_dir))
+        kwargs = {'count': count,
                   'start_preproc_time': time.time(),
                   'initial_preproc_count': None,
                   'prior_preproc_count': 0
@@ -212,7 +210,11 @@ def _update_preproc_progress_bar(kwargs=None):
 
 def _update_pick_progress_bar(kwargs=None):
     if kwargs is None:
-        kwargs = {'count': len(os.listdir('input')),
+        count = 0
+        input_dirs = glob.glob('input*')
+        for input_dir in input_dirs:
+            count += len(os.listdir(input_dir))
+        kwargs = {'count': count,
                   'start_pick_time': time.time(),
                   'initial_picks': None,
                   'prior_pick_count': 0
@@ -236,39 +238,48 @@ def _update_pick_progress_bar(kwargs=None):
     return lambda: _update_pick_progress_bar(kwargs)
 
 
-def run_cryolo(**kwargs):
+def run_cryolo(input_dir, **kwargs):
     weights_location = kwargs.get('weights_location', CRYOLO_PHOSNET_LOCATION)
-    cryolo_cmd = f'{EXECUTABLE} -c cryolo_config.json --weights {weights_location} --input input --output output'
+    cryolo_cmd = f'{EXECUTABLE} --conf cryolo_config.json --weights {weights_location} --input {input_dir} --output output'
     for opt in ['num_cpu', 'gpu_fraction', 'prediction_batch_size']:
         value = kwargs.get(opt)
         if value is not None:
             cryolo_cmd += f" --{opt} {value}"
     if kwargs.get('otf'):
-        cryolo_cmd += f" --otf"
+        cryolo_cmd += " --otf"
+    try:
+        gpu_number = int(input_dir[-1])
+        cryolo_cmd += f" --gpu {gpu_number}"
+    except: pass
     cryolo_cmd += ' >cryolo.out 2>cryolo.err'
     return subprocess.Popen(cryolo_cmd, shell=True)
 
 
-def run_all_cryolo(relion_job_dir, micrograph_paths, num_jobs=1, **kwargs):
+def run_all_cryolo(relion_job_dir, micrograph_paths, **kwargs):
     print(' Autopicking with crYOLO ...', flush=True)
     abs_job_dir = os.path.abspath(relion_job_dir)
     cwd = os.getcwd()
     update_progress_bar = _update_preproc_progress_bar
-
     for k in micrograph_paths.keys():
+        count = 0
         relion_micrograph_subdirectory = os.path.basename(k)
         cryolo_working_directory = os.path.join(abs_job_dir, relion_micrograph_subdirectory, 'crYOLO')
         try:
             os.chdir(cryolo_working_directory)
-            count = len(os.listdir('input'))
+            input_dirs = glob.glob('input*')
+            for input_dir in input_dirs:
+                count += len(os.listdir(input_dir))
             if count < 1:
                 continue
-            proc = run_cryolo(**kwargs)
-            while proc.poll() is None:
+            procs = []
+            for input_dir in input_dirs:
+                procs.append(run_cryolo(input_dir, **kwargs))
+            while any([proc.poll() is None for proc in procs]):
                 update_progress_bar = update_progress_bar()
                 abort = check_abort_signal(abs_job_dir)
                 if abort:
-                    os.kill(proc.pid, signal.SIGTERM)
+                    for proc in procs:
+                        os.kill(proc.pid, signal.SIGTERM)
                     raise Exception('Relion RELION_JOB_ABORT_NOW file seen. Terminating.')
                 time.sleep(1)
         finally:
@@ -396,13 +407,17 @@ if __name__ == '__main__':
             try: os.remove(f)
             except FileNotFoundError: pass
 
+        jobs = max(GPU_COUNT, 1)
+        threads_per_job = max(int(args.j/jobs), 1)
+
         cryolo_params = {'weights_location': CRYOLO_PHOSNET_LOCATION,
                          'threshold': args.threshold,
-                         'num_cpu': args.j,
+                         'num_cpu': threads_per_job,
                          'gpu_fraction': args.gpu_fraction,
                          'prediction_batch_size': args.prediction_batch_size,
                          'otf': args.otf,
                          }
+
 
         print('Cryolo Wrapper for Relion v3.1', flush=True)
         print('Written by TJ Ragan (LISCB, University of Leicester)\n', flush=True)
@@ -411,6 +426,7 @@ if __name__ == '__main__':
         print('Wrapper Version: 0.3\n', flush=True)
 
         print(f'Print compute info here.', flush=True)
+        print(f"Using {GPU_COUNT} GPUs: {GPU_IDS}.", flush=True)
         print(f'=================', flush=True)
 
         relion_job_dir = args.o
@@ -418,11 +434,12 @@ if __name__ == '__main__':
 
         os.makedirs(relion_job_dir, exist_ok=True)
         micrograph_paths = get_input_micrograph_paths(input_star_file)
-        setup_temp_dir(relion_job_dir, micrograph_paths, args.overwrite)
+        setup_temp_dir(relion_job_dir, micrograph_paths, jobs=jobs, force=args.overwrite)
         make_config_files(relion_job_dir, micrograph_paths, cryolo_params)
         run_all_cryolo(relion_job_dir, micrograph_paths, **cryolo_params)
 
-        postfix_ID, particle_sizes, = assimilate_results(relion_job_dir, micrograph_paths, remove_temp_images=True, **cryolo_params)
+        postfix_ID, particle_sizes, = assimilate_results(relion_job_dir, micrograph_paths,
+                                                         remove_temp_images=False, **cryolo_params)
         print_results_summary(relion_job_dir, particle_sizes)
 
         write_relion_star_final(relion_job_dir, input_star_file)
