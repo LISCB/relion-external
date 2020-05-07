@@ -43,6 +43,7 @@ def parse_args():
 
     parser.add_argument('--o', metavar='DIRECTORY', help='Job output directory')
     parser.add_argument('--in_mics', metavar='STARFILE', help='Input micrographs .star file')
+    parser.add_argument('--weights', default=CRYOLO_PHOSNET_LOCATION, help='Trained weights.  (Default: General PhosaurusNet Model.)')
     parser.add_argument('--threshold', type=float, default=0.3, help='Picking threshold.  (Default: 0.3.  Lower means pick more)')
     parser.add_argument('--prediction_batch_size', type=int, default=3, help='Images per batch, lower values will help with memory issues.  (Default: 3)')
     parser.add_argument('--gpu_fraction', type=float, default=1.0, help='Fraction of GPU memory to use.  (Default: 1.0)')
@@ -426,7 +427,7 @@ if __name__ == '__main__':
         else:
             threads_per_job = max(int(args.j/jobs), 1)
 
-        cryolo_params = {'weights_location': CRYOLO_PHOSNET_LOCATION,
+        cryolo_params = {'weights_location': args.weights,
                          'threshold': args.threshold,
                          'num_cpu': threads_per_job,
                          'gpu_fraction': args.gpu_fraction,
