@@ -44,11 +44,11 @@ def parse_args():
     parser.add_argument('--o', metavar='DIRECTORY', help='Job output directory. DO NOT USE IF RUNNING FROM RELION.')
     parser.add_argument('--in_mics', metavar='STARFILE', help='Input micrographs .star file. DO NOT USE IF RUNNING FROM RELION.')
     parser.add_argument('--weights', default=CRYOLO_PHOSNET_LOCATION, help='Trained weights.  (Default: General PhosaurusNet Model.)')
-    parser.add_argument('--threshold', type=float, default=0.3, help='Picking threshold.  (Default: 0.3.  Lower means pick more)')
+    parser.add_argument('--threshold', type=float, default=0.3, help='Picking threshold.  (Default: 0.3.  Lower means pick more.)')
     parser.add_argument('--prediction_batch_size', type=int, default=3, help='Images per batch, lower values will help with memory issues.  (Default: 3)')
     parser.add_argument('--gpu_fraction', type=float, default=1.0, help='Fraction of GPU memory to use.  (Default: 1.0)')
     parser.add_argument('--otf', action='store_true', help='On-The-Fly pre-filtering.  Not currently multi-threaded. (Default: off)')
-    parser.add_argument('--norm_margin', type=float, default=0.0, help='Relative margin size for normalization. (Default: 0)')
+    parser.add_argument('--norm_margin', type=float, default=0.2, help='Relative margin size for normalization. (Default: 0.2)')
     parser.add_argument('--overwrite', action='store_true', help='Force complete re-picking.  (default: off)')
     parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: 1 per GPU)")
     parser.add_argument('--filament', action='store_true', help='Use filament mode.  (default: off)')
@@ -284,6 +284,10 @@ def run_all_cryolo(relion_job_dir, micrograph_paths, **kwargs):
             for input_dir in input_dirs:
                 procs.append(run_cryolo(input_dir, **kwargs))
             while any([proc.poll() is None for proc in procs]):
+                for proc in procs:
+                    poll = proc.poll()
+                    if (poll is not None) and (poll > 0):
+                        raise Exception('crYOLO job failed. Exiting.')
                 update_progress_bar = update_progress_bar()
                 abort = check_abort_signal(abs_job_dir)
                 if abort:
@@ -381,7 +385,6 @@ def print_results_summary(relion_job_dir, particle_sizes):
         kept_particle_count = 0
         for line in wc:
             kept_particle_count += (int(line.strip().split()[0]) - 11)  #11 header lines per star file
-        print(f' Total number of particles from {len(wc)} micrographs is {kept_particle_count}')
         if len(particle_sizes) > 0:
             print(f' i.e. on average there were {int(round(kept_particle_count/len(wc)))} particles per micrograph')
             min_sizes = sorted([min(s) for s in particle_sizes])
@@ -406,6 +409,8 @@ def print_results_summary(relion_job_dir, particle_sizes):
             print(f'   75%-Quantile: {max_sizes[-twentyfifth_percentile_index]} pix')
             print(f'   95%-Quantile: {max_sizes[-fifth_percentile_index]} pix')
             print(f'   Absolute maximum: {max_sizes[-1]} pix')
+            print()
+        print(f' Total number of particles from {len(wc)} micrographs is {kept_particle_count}')
 
 
 if __name__ == '__main__':
@@ -422,7 +427,7 @@ if __name__ == '__main__':
         else:
             threads_per_job = max(int(args.j/jobs), 1)
 
-        cryolo_params = {'weights_location': args.weights,
+        cryolo_params = {'weights_location': os.path.abspath(args.weights),
                          'threshold': args.threshold,
                          'num_cpu': threads_per_job,
                          'gpu_fraction': args.gpu_fraction,
