@@ -41,8 +41,8 @@ MOUSE = r'~~( ϵ:>'
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--o', metavar='DIRECTORY', help='Job output directory')
-    parser.add_argument('--in_mics', metavar='STARFILE', help='Input micrographs .star file')
+    parser.add_argument('--o', metavar='DIRECTORY', help='Job output directory. DO NOT USE IF RUNNING FROM RELION.')
+    parser.add_argument('--in_mics', metavar='STARFILE', help='Input micrographs .star file. DO NOT USE IF RUNNING FROM RELION.')
     parser.add_argument('--weights', default=CRYOLO_PHOSNET_LOCATION, help='Trained weights.  (Default: General PhosaurusNet Model.)')
     parser.add_argument('--threshold', type=float, default=0.3, help='Picking threshold.  (Default: 0.3.  Lower means pick more)')
     parser.add_argument('--prediction_batch_size', type=int, default=3, help='Images per batch, lower values will help with memory issues.  (Default: 3)')
