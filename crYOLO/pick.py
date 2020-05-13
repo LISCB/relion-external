@@ -52,8 +52,6 @@ def parse_args():
     parser.add_argument('--overwrite', action='store_true', help='Force complete re-picking.  (default: off)')
     parser.add_argument('--j', metavar="NUM_CPU", type=int, default=1, help="Threads per job. (Default: 1 per GPU)")
     parser.add_argument('--filament', action='store_true', help='Use filament mode.  (default: off)')
-    parser.add_argument('--nosplit', action='store_true', help='The filament mode does not split to curved filaments.  (default: off)')
-    parser.add_argument('--nomerging', action='store_true', help='The filament mode does not merge filaments.  (default: off)')
     parser.add_argument('--filament_width', type=int, required=False, help='Filament width in pixels.')
     parser.add_argument('--mask_width', type=int, default=100, help='Mask width in pixels.')
     parser.add_argument('--box_distance', type=int, default=0, help='Distance in pixel between two boxes.')
@@ -104,11 +102,8 @@ def setup_temp_dir(relion_job_dir, micrograph_paths, jobs=1, force=False):
                 shutil.move(cryolo_working_directory, cryolo_working_directory + '-' + old_path_suffix)
             except IndexError:
                 pass
-        if jobs == 1:
-            os.makedirs(input_symlinks_dir, exist_ok=True)
-        else:
-            for j in range(jobs):
-                os.makedirs(input_symlinks_dir + f'_{j}', exist_ok=True)
+        for j in range(jobs):
+            os.makedirs(input_symlinks_dir + f'_{j}', exist_ok=True)
         source_directory = os.path.join(TOP_DIR, k)
         for i, m in enumerate(v):
             if not force:
