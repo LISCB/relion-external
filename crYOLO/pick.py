@@ -119,6 +119,7 @@ def setup_temp_dir(relion_job_dir, micrograph_paths, jobs=1, force=False):
             except FileExistsError:
                 pass
 
+
 def make_config_files(relion_job_dir, micrograph_paths, cryolo_params):
     cryolo_config = '''{
     "model": {
@@ -417,8 +418,10 @@ if __name__ == '__main__':
     try:
         args = parse_args()
 
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
         for f in ('RELION_JOB_EXIT_FAILURE', 'RELION_JOB_EXIT_SUCCESS'):
-            try: os.remove(f)
+            try: os.remove(os.path.join(args.o, f))
             except FileNotFoundError: pass
 
         jobs = max(GPU_COUNT, 1)
@@ -445,7 +448,7 @@ if __name__ == '__main__':
             cryolo_params['minimum_number_boxes'] = args.minimum_number_boxes
             cryolo_params['search_range_factor'] = args.search_range_factor
 
-        print('Cryolo Wrapper for Relion v3.1', flush=True)
+        print('crYOLO Wrapper for Relion v3.1', flush=True)
         print('Written by TJ Ragan (LISCB, University of Leicester)\n', flush=True)
 
         print('crYOLO Version: 1.6.1', flush=True)

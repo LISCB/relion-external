@@ -317,13 +317,13 @@ def assimilate_results(relion_job_dir):
 
 
 if __name__ == '__main__':
-    print('Deal with moving model .h5 file and relion communication files')
-    # sys.exit()
     try:
         args = parse_args()
 
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
         for f in ('RELION_JOB_EXIT_FAILURE', 'RELION_JOB_EXIT_SUCCESS'):
-            try: os.remove(f)
+            try: os.remove(os.path.join(args.o, f))
             except FileNotFoundError: pass
 
         cryolo_params = {'weights_location': CRYOLO_PHOSNET_LOCATION,
@@ -340,7 +340,7 @@ if __name__ == '__main__':
                          'filter': args.filter,
                          }
 
-        print('Cryolo Wrapper for Relion v3.1', flush=True)
+        print('crYOLO Wrapper for Relion v3.1', flush=True)
         print('Written by TJ Ragan (LISCB, University of Leicester)\n', flush=True)
 
         print('crYOLO Version: 1.6.1', flush=True)
