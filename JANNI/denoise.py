@@ -66,19 +66,43 @@ def parse_args():
 
 
 def get_input_micrograph_paths(starfile_location):
-    #TODO: use default callable and add commandline parameter to specify
+    metadata = get_input_micrograph_metadata(starfile_location)
+    micrographs = metadata['micrographs']
+    return [m[0] for m in micrographs]
+
+
+def get_input_micrograph_metadata(starfile_location):
+    # TODO: use default callable and add commandline parameter to specify
     with tempfile.TemporaryDirectory() as tmpdirname:
         curr_dir = os.getcwd()
         abs_starfile_location = os.path.abspath(starfile_location)
+        ogs = {}
+        micrographs = []
         try:
             os.chdir(tmpdirname)
-            proc = subprocess.run(f'relion_star_printtable {abs_starfile_location} data_micrographs _rlnMicrographName',
-                                  check=True, shell=True,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            rlnMicrographNames = proc.stdout.decode().splitlines()
+            og_fields = ['_rlnOpticsGroupName', '_rlnOpticsGroup', '_rlnMicrographPixelSize', '_rlnVoltage', '_rlnSphericalAberration']
+            og_fields = ' '.join(og_fields)
+            optics_proc = subprocess.run(
+                f'relion_star_printtable {abs_starfile_location} data_optics {og_fields}',
+                check=True, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for og in optics_proc.stdout.decode().splitlines():
+                split_og = og.strip().split()
+                ogs[split_og[0]] = {'rlnOpticsGroup': int(split_og[1]),
+                                    'rlnMicrographPixelSize': float(split_og[2]),
+                                    'rlnVoltage': float(split_og[3]),
+                                    'rlnSphericalAberration': float(split_og[4])}
+
+            micrographs_proc = subprocess.run(
+                f'relion_star_printtable {abs_starfile_location} data_micrographs _rlnMicrographName _rlnOpticsGroup',
+                check=True, shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for m in micrographs_proc.stdout.decode().splitlines():
+                split_m = m.strip().split()
+                micrographs.append((split_m[0], int(split_m[1])))
         finally:
             os.chdir(curr_dir)
-        return [n.strip() for n in rlnMicrographNames]
+        return {'optics groups': ogs, 'micrographs': micrographs}
 
 
 def call_slaves(args):
@@ -101,6 +125,7 @@ def call_slaves(args):
     else:
         slave_cmd = CPU_PYTHON + ' ' + slave_cmd
         # print(slave_cmd)
+        print(' Initialising denoiser(s).  (This can a minute or two, please wait.)')
         return (subprocess.Popen(slave_cmd, env=my_env, shell=True,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE
                                  ), )
@@ -200,54 +225,71 @@ def make_output_tree(args):
     return relion_job_dir
 
 
-# def write_relion_star_final(relion_job_dir, input_star_file):
-#     with open(os.path.join(relion_job_dir, SUFFIX_STAR_FILENAME), 'w') as f:
-#         f.write(f'{input_star_file}\n')
-#
-#     with open(os.path.join(relion_job_dir, 'RELION_OUTPUT_NODES.star'), 'w') as f:
-#         f.write('data_output_nodes\n')
-#         f.write('loop_\n')
-#         f.write('_rlnPipeLineNodeName #1\n')
-#         f.write('_rlnPipeLineNodeType #2\n')
-#         f.write(f'{os.path.join(relion_job_dir, SUFFIX_STAR_FILENAME)}    2\n')
-#
-#
-# def print_results_summary(relion_job_dir, particle_sizes):
-#     for k in micrograph_paths.keys():
-#         relion_micrograph_directory = os.path.basename(k)
-#         relion_output_directory = os.path.join(relion_job_dir, relion_micrograph_directory)
-#         wc = subprocess.run(f'wc -l {relion_output_directory}/*.star',
-#                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-#                                 shell=True).stdout.decode().splitlines()[:-1]
-#         kept_particle_count = 0
-#         for line in wc:
-#             kept_particle_count += (int(line.strip().split()[0]) - 11)  #11 header lines per star file
-#         if len(particle_sizes) > 0:
-#             print(f' i.e. on average there were {int(round(kept_particle_count/len(wc)))} particles per micrograph')
-#             min_sizes = sorted([min(s) for s in particle_sizes])
-#             max_sizes = sorted([max(s) for s in particle_sizes])
-#             sizes_len = len(min_sizes)
-#             fifth_percentile_index = int(sizes_len/20)
-#             twentyfifth_percentile_index = int(sizes_len/4)
-#             median_index = int(sizes_len/2)
-#             print('\n Short axis statistics:')
-#             print(f'   Absolute minimum: {min_sizes[0]} pix')
-#             print(f'   5%-Quantile: {min_sizes[fifth_percentile_index]} pix')
-#             print(f'   25%-Quantile: {min_sizes[twentyfifth_percentile_index]} pix')
-#             print(f'   Median: {min_sizes[median_index]} pix (Mean: {(sum(min_sizes)/sizes_len):.1f} pix)')
-#             print(f'   75%-Quantile: {min_sizes[-twentyfifth_percentile_index]} pix')
-#             print(f'   95%-Quantile: {min_sizes[-fifth_percentile_index]} pix')
-#             print(f'   Absolute maximum: {min_sizes[-1]} pix')
-#             print(' Long axis statistics:')
-#             print(f'   Absolute minimum: {max_sizes[0]} pix')
-#             print(f'   5%-Quantile: {max_sizes[fifth_percentile_index]} pix')
-#             print(f'   25%-Quantile: {max_sizes[twentyfifth_percentile_index]} pix')
-#             print(f'   Median: {max_sizes[median_index]} pix (Mean: {(sum(max_sizes)/sizes_len):.1f} pix)')
-#             print(f'   75%-Quantile: {max_sizes[-twentyfifth_percentile_index]} pix')
-#             print(f'   95%-Quantile: {max_sizes[-fifth_percentile_index]} pix')
-#             print(f'   Absolute maximum: {max_sizes[-1]} pix')
-#             print()
-#         print(f' Total number of particles from {len(wc)} micrographs is {kept_particle_count}')
+def write_relion_star_final(relion_job_dir, input_star_file):
+    input_micrograph_metadata = get_input_micrograph_metadata(input_star_file)
+    optics_groups = input_micrograph_metadata['optics groups']
+    input_micrographs = input_micrograph_metadata['micrographs']
+
+    input_micrograph_paths = get_input_micrograph_paths(input_star_file)
+    output_image_paths = []
+    for output_dir in _get_output_dirs(input_micrograph_paths):
+        output_image_paths += glob.glob(os.path.join(relion_job_dir, output_dir, '*.mrc'))
+
+    with open(os.path.join(relion_job_dir, "denoised_micrographs.star"), 'w') as f:
+        f.write('\n# version 30001\n\n')
+        f.write('data_optics\n\n')
+        f.write('loop_\n')
+        f.write('_rlnOpticsGroupName  # 1\n')
+        f.write('_rlnOpticsGroup  # 2\n')
+        f.write('_rlnVoltage  # 3\n')
+        f.write('_rlnSphericalAberration  # 4\n')
+        f.write('_rlnMicrographPixelSize  # 5\n')
+        for og_name, og in optics_groups.items():
+            f.write(f"{og_name} ")
+            f.write(f" {og['rlnOpticsGroup']:4d} ")
+            f.write(f" {og['rlnVoltage']:4.3f} ")
+            f.write(f" {og['rlnSphericalAberration']:2.3f} ")
+            f.write(f" {og['rlnMicrographPixelSize']:3.5f} ")
+            f.write("\n")
+
+        f.write('\n# version 30001\n\n')
+        f.write('data_micrographs\n\n')
+        f.write('loop_\n')
+        f.write('_rlnMicrographName  # 1\n')
+        f.write('_rlnOpticsGroup  # 2\n')
+
+        for micrograph, og_number in input_micrographs:
+            for output_image_path in output_image_paths:
+                output_image_basename = os.path.basename(output_image_path)
+                if os.path.basename(micrograph) == output_image_basename:
+                    f.write(f'{output_image_path}  {og_number:3d}\n')
+                    break
+        # for output_image_path in output_image_paths:
+        #     output_image_basename = os.path.basename(output_image_path)
+        #     for micrograph, og_number in input_micrographs:
+        #         if os.path.basename(micrograph) == output_image_basename:
+        #             f.write(f'{output_image_path}  {og_number:3d}\n')
+        #             break
+
+    with open(os.path.join(relion_job_dir, 'RELION_OUTPUT_NODES.star'), 'w') as f:
+        f.write('data_output_nodes\n')
+        f.write('loop_\n')
+        f.write('_rlnPipeLineNodeName #1\n')
+        f.write('_rlnPipeLineNodeType #2\n')
+        f.write(f'{os.path.join(relion_job_dir, "denoised_micrographs.star")}    1\n')
+
+
+def _get_denoised_micrograph_count(relion_job_dir, input_star_file):
+    micrograph_paths = get_input_micrograph_paths(input_star_file)
+    output_image_count = 0
+    for output_dir in _get_output_dirs(micrograph_paths):
+        output_image_count += len(glob.glob(os.path.join(relion_job_dir, output_dir, '*.mrc')))
+    return output_image_count
+
+def print_results_summary(relion_job_dir, input_star_file, initial_micrograph_count=0):
+    output_image_count = _get_denoised_micrograph_count(relion_job_dir, input_star_file)
+    print(f'\nFinished denoising {output_image_count-initial_micrograph_count} micrographs.')
+    print(f'{output_image_count} total denoised micrographs available.')
 
 
 def run_as_master(args):
@@ -272,25 +314,27 @@ def run_as_master(args):
     try:
         relion_job_dir = make_output_tree(args)
 
+        initial_denoised_count = _get_denoised_micrograph_count(relion_job_dir, args.in_mics)
+
         slaves = call_slaves(args)
         monitor_slaves(args, slaves)
         Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
 
-        #TODO:
-        # print_results_summary(args.o, args.mics_in)
-        # write_relion_star_final(args.o, args.mics_in)
-
-
-        Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
-        print(f'\n Done!\n')
+        print_results_summary(relion_job_dir, args.in_mics, initial_denoised_count)
+        write_relion_star_final(relion_job_dir, args.in_mics)
 
     except Exception as e:
+        relion_job_dir = args.o
         if os.path.exists(os.path.join(relion_job_dir, 'RELION_JOB_ABORT_NOW')):
             os.remove(os.path.join(relion_job_dir, 'RELION_JOB_ABORT_NOW'))
             Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_ABORTED')).touch()
         else:
+            print('boom!')
             Path('RELION_JOB_EXIT_FAILURE').touch()
             raise e
+
+    Path(os.path.join(relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
+    print(f'\n Done!\n')
 
 
 def run_as_slave(args):
