@@ -52,7 +52,7 @@ class Topaz_Picker(Micrographs2Starfiles):
                                help='log-likelihood score threshold at which to terminate region extraction, -6 is p>=0.0025.  Lower numbers mean more picking. (Default: 0)')
         pick_args.add_argument('-m', '--model', default='resnet16',
                                help='path to trained subimage classifier, or pretrained network name.' \
-                                    ' Available pretrained networks are: resnet15, resnet8, conv127, conv63, conv31.  (Default: pretrained resnet16)')
+                                    ' Available pretrained networks are: resnet16, resnet8, conv127, conv63, conv31.  (Default: pretrained resnet16)')
         pick_args.add_argument('--batch-size', default=4, type=int,
                                help='batch size for scoring micrographs with model. (Default: 4)')
 
@@ -160,6 +160,10 @@ class Topaz_Picker(Micrographs2Starfiles):
         radius = parsed_args.radius
         scale = parsed_args.scale
         affine = parsed_args.affine
+        model = parsed_args.model
+        model_abspath = os.path.abspath(model)
+        if os.path.isfile(model_abspath):
+            model = model_abspath
         for d in input_dirs:
             os.makedirs(os.path.join('output', d), exist_ok=True)
             preproc_cmd = ''
@@ -171,7 +175,7 @@ class Topaz_Picker(Micrographs2Starfiles):
                 preproc_cmd += ' --affine '
             preproc_cmd += f' --destdir preproc/{d} input/{d}/*.mrc'
             preproc_cmd += f' >preproc.out 2>preproc.err'
-            pick_cmd = f'{TOPAZ} extract --device {gpu_id} --radius {radius} --up-scale {scale} --model resnet16_u64 --threshold -6'
+            pick_cmd = f'{TOPAZ} extract --device {gpu_id} --radius {radius} --up-scale {scale} --model {model} --threshold -6'
             pick_cmd += f' --output output/{d}/{self.OUTPUT_FILENAME} preproc/{d}/*.mrc'
             pick_cmd += f' >pick.out 2>pick.err'
             # pick_cmd = ' echo Skip pick'

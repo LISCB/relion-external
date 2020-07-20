@@ -194,7 +194,8 @@ class Topaz_Pick_Trainer(ParticlesTo):
         preproc_cmd += f' --destdir preproc/ input/*.mrc'
         train_cmd = f'{TOPAZ} train '  #TODO: --num-workers and --num-threads
         for arg in vars(parsed_args):
-            if arg not in ['o', 'in_parts', 'j', 'cache', 'keep_preproc',
+            if arg not in ['o', 'in_parts', 'in_coords', 'in_mics',
+                           'j', 'cache', 'keep_preproc',
                            'no_pretrained', 'num_particles', 'pi',
                            'affine', 'natural', 'scale']:
                 train_cmd += f'--{arg.replace("_", "-")} {getattr(parsed_args, arg)} '
@@ -209,6 +210,7 @@ class Topaz_Pick_Trainer(ParticlesTo):
         train_cmd += f' --train-targets converted.txt'
         train_cmd += f' --save-prefix output/model'
         train_cmd += f' -o output/model_training.txt'
+        train_cmd += f' >topaz.out 2>topaz.err'
         proc = Popen(preproc_cmd + ' && sleep 1 && ' + train_cmd, shell=True, env=env,
                      stdout=PIPE, stderr=PIPE,
                      )

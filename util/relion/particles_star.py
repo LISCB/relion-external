@@ -40,7 +40,7 @@ def read_particles_star(starfile_location):
                                                rlnAmplitudeContrast=float(split_og[5]),
                                                rlnImagePixelSize=float(split_og[5]),
                                                rlnImageSize=float(split_og[5]),
-                                               rlnImageDimensionality=float(split_og[8]),
+                                               rlnImageDimensionality=int(split_og[8]),
                                                )
 
             particle_fields_txt = ' _'.join(PARTICLES_FIELDS)

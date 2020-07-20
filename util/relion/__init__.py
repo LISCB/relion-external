@@ -1,6 +1,7 @@
 import os
 from .micrographs_star import read_micrographs_star
 from .particles_star import read_particles_star
+from .coords_star import read_coords_star
 
 def read_star(starfile_location):
     basename = os.path.basename(starfile_location)

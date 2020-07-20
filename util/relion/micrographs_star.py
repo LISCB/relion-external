@@ -7,7 +7,7 @@ from collections import namedtuple
 RELION_STAR_PRINTTABLE = '/net/prog/relion3/2085051-icc-cpu-opt/bin/relion_star_printtable'
 
 OG_FIELDS = ['rlnOpticsGroupName', 'rlnOpticsGroup', 'rlnMicrographPixelSize', 'rlnVoltage',
-             'rlnSphericalAberration']
+             'rlnSphericalAberration', 'rlnAmplitudeContrast']
 MICROGRAPH_FIELDS = ['rlnMicrographName',  'rlnOpticsGroup']
 
 OpticsGroup = namedtuple('OpticsGroup', OG_FIELDS)
@@ -35,7 +35,8 @@ def read_micrographs_star(starfile_location):
                                                rlnOpticsGroup=int(split_og[1]),
                                                rlnMicrographPixelSize=float(split_og[2]),
                                                rlnVoltage=float(split_og[3]),
-                                               rlnSphericalAberration=float(split_og[4])
+                                               rlnSphericalAberration=float(split_og[4]),
+                                               rlnAmplitudeContrast=float(split_og[5]),
                                                )
 
             micrograph_fields_txt = ' _'.join(MICROGRAPH_FIELDS)
