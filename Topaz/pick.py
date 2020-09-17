@@ -1,3 +1,28 @@
+"""
+    This file is part of the relion-external suite that allows integration of
+    arbitrary software into Relion 3.1.
+
+    Copyright (C) 2020 University of Leicester
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see www.gnu.org/licenses/gpl-3.0.html.
+
+    Written by TJ Ragan (tj.ragan@leicester.ac.uk),
+    Leicester Institute of Structural and Chemical Biology (LISCB)
+
+"""
+
+
 # TODO: make downscaling params more sensible/settable
 
 import os
@@ -10,7 +35,9 @@ import sys
 from util.framework.micrographs2starfiles import Micrographs2Starfiles
 
 
-TOPAZ = '/net/prog/anaconda3/envs/topaz/bin/python /net/prog/anaconda3/envs/topaz/bin/topaz'
+GPU_PYTHON = os.environ.get('TOPAZ_GPU_PYTHON', os.environ.get('TOPAZ_PYTHON', shutil.which('python3')))
+TOPAZ_EXE = os.environ.get('TOPAZ_EXECUTABLE', shutil.which('topaz'))
+TOPAZ = ' '.join((GPU_PYTHON, TOPAZ_EXE))
 
 class Topaz_Picker(Micrographs2Starfiles):
     '''
@@ -68,6 +95,7 @@ class Topaz_Picker(Micrographs2Starfiles):
         finally:
             return None
 
+
     def derive_extra_text(self, job_object):
         # TODO: can we use the --describe method to get the receptive field?
         text = []
@@ -81,6 +109,12 @@ class Topaz_Picker(Micrographs2Starfiles):
         text.append('*** You can estimate the Processing time required as: 10 sec + ( (Number of Micrographs / Number of GPUs) ) * 2 sec')
         # TODO: convert this to Å
         model = job_object.args.model
+
+
+        if model not in ['resnet16', 'resnet8', 'conv127', 'conv63', 'conv31'] and not os.path.isfile(model):
+            # Path('RELION_JOB_EXIT_FAILURE').touch()
+            raise (FileNotFoundError(f'The model is not one of the pre-bundled models and {model} was not found.'))
+
         receptive_field = self.RECEPTIVE_FIELD_SIZES.get(model, self._get_model_receptive_field())
         if receptive_field:
             text.append(f'\nMaximum particle pick size: {receptive_field * job_object.args.scale} pixels.')
@@ -161,9 +195,11 @@ class Topaz_Picker(Micrographs2Starfiles):
         scale = parsed_args.scale
         affine = parsed_args.affine
         model = parsed_args.model
-        model_abspath = os.path.abspath(model)
-        if os.path.isfile(model_abspath):
-            model = model_abspath
+        if model not in ['resnet16', 'resnet8', 'conv127', 'conv63', 'conv31']:
+            model_abspath = os.path.abspath(os.path.join(job_object.top_dir, parsed_args.model))
+            if os.path.isfile(model_abspath):
+                model = model_abspath
+
         for d in input_dirs:
             os.makedirs(os.path.join('output', d), exist_ok=True)
             preproc_cmd = ''

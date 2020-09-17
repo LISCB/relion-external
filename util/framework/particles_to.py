@@ -1,5 +1,28 @@
-import time
-import signal
+"""
+    This file is part of the relion-external suite that allows integration of
+    arbitrary software into Relion 3.1.
+
+    Copyright (C) 2020 University of Leicester
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see www.gnu.org/licenses/gpl-3.0.html.
+
+    Written by TJ Ragan (tj.ragan@leicester.ac.uk),
+    Leicester Institute of Structural and Chemical Biology (LISCB)
+
+"""
+
+
 from pathlib import Path
 import os
 from glob import glob
@@ -20,13 +43,6 @@ class ParticlesTo(RelionJob):
                                  help='Input coords .star file. Must be paired with a micrographs star file. DO NOT USE IF RUNNING FROM RELION.')
 
 
-    def recover_output_files(self):
-        pass
-
-
-    def write_relion_output(self):
-        pass
-
 
     @staticmethod
     def get_micrographs_in_particles_starfile(starfile):
@@ -36,13 +52,13 @@ class ParticlesTo(RelionJob):
         return micrographs
 
 
-    def write_relion_output(self):
-        with open(os.path.join(self.relion_job_dir, 'RELION_OUTPUT_NODES.star'), 'w') as f:
-            f.write('data_output_nodes\n')
-            f.write('loop_\n')
-            f.write('_rlnPipeLineNodeName #1\n')
-            f.write('_rlnPipeLineNodeType #2\n')
-            f.write(f'None 20\n')
+    # def write_relion_output_nodes(self):
+    #     with open(os.path.join(self.relion_job_dir, 'RELION_OUTPUT_NODES.star'), 'w') as f:
+    #         f.write('data_output_nodes\n')
+    #         f.write('loop_\n')
+    #         f.write('_rlnPipeLineNodeName #1\n')
+    #         f.write('_rlnPipeLineNodeType #2\n')
+    #         f.write(f'None 20\n')
 
 
     def assemble_particles_starfile(self, in_parts=None, in_mics=None, in_coords=None):
@@ -115,7 +131,9 @@ class ParticlesTo(RelionJob):
                 self.worker_output_analysis_function(self)
             if self.worker_cleanup_function is not None:
                 self.worker_cleanup_function(self)
-            self.write_relion_output()
+
+            self.write_relion_output_starfile()
+            self.write_relion_output_nodes()
 
             Path(os.path.join(self.relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
             print(f' Done!\n')

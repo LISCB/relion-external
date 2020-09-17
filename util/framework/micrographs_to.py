@@ -1,12 +1,34 @@
-import time
-import signal
+"""
+    This file is part of the relion-external suite that allows integration of
+    arbitrary software into Relion 3.1.
+
+    Copyright (C) 2020 University of Leicester
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see www.gnu.org/licenses/gpl-3.0.html.
+
+    Written by TJ Ragan (tj.ragan@leicester.ac.uk),
+    Leicester Institute of Structural and Chemical Biology (LISCB)
+
+"""
+
+
 from pathlib import Path
 import os
 from glob import glob
-from subprocess import check_output, PIPE, CalledProcessError
 import shutil
 
-from util.relion import read_star
+from util.relion import read_micrographs_star
 from util.framework.job import RelionJob
 
 
@@ -95,10 +117,6 @@ class MicrographsTo(RelionJob):
     #     print()
 
 
-    def write_relion_output(self):
-        pass
-
-
     def recover_output_files(self):
         if self.io_mappings is None:
             io_mappings = {}
@@ -169,7 +187,7 @@ class MicrographsTo(RelionJob):
     def run(self):
         self.initial_run()
         try:
-            self.input_micrographs_starfile = read_star(self.args.in_mics)
+            self.input_micrographs_starfile = read_micrographs_star(self.args.in_mics)
             self.make_output_tree()
             # self.working_top_dir = self.make_and_populate_working_tree()
             self.make_and_populate_working_tree()
@@ -219,7 +237,8 @@ class MicrographsTo(RelionJob):
             if self.worker_cleanup_function is not None:
                 self.worker_cleanup_function(self)
 
-            self.write_relion_output()
+            self.write_relion_output_starfile()
+            self.write_relion_output_nodes()
 
             Path(os.path.join(self.relion_job_dir, 'RELION_JOB_EXIT_SUCCESS')).touch()
             print(f' Done!\n')

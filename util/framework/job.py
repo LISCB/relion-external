@@ -1,3 +1,28 @@
+"""
+    This file is part of the relion-external suite that allows integration of
+    arbitrary software into Relion 3.1.
+
+    Copyright (C) 2020 University of Leicester
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see www.gnu.org/licenses/gpl-3.0.html.
+
+    Written by TJ Ragan (tj.ragan@leicester.ac.uk),
+    Leicester Institute of Structural and Chemical Biology (LISCB)
+
+"""
+
+
 import subprocess
 import time
 from collections import defaultdict
@@ -11,7 +36,7 @@ import signal
 
 MOUSE = r'~~( ϵ:>'
 CHEESE = r'[oo]'
-
+VERSION = 0.5
 
 class RelionJob:
 
@@ -23,7 +48,8 @@ class RelionJob:
                  worker_output_analysis_function=None,
                  worker_cleanup_function=None,
                  preproc_dir=False,
-                 parallelizable=True):
+                 parallelizable=True,
+                 output_star_template=None,):
         self.name = name
         self.extra_text = extra_text
         self.worker_setup_function = worker_setup_function
@@ -36,6 +62,11 @@ class RelionJob:
         self.num_workers = 1
         self.args = None
         self._out_ext = None
+        if output_star_template:
+            self.output_star_name = output_star_template.format(self.name)
+        else:
+            self.output_star_name = None
+        self._relion_output_node_int = -1
 
         self.working_top_dir = None
         self.total_count = 0
@@ -278,8 +309,12 @@ class RelionJob:
 
     def print_header_text(self):
         print('LISCB External program wrapper for Relion 3.1.', flush=True)
-        print('Written by TJ Ragan', flush=True)
-        print('Wrapper Version: 0.4\n', flush=True)
+        print('(Leicester Institute of Structural and Chemical Biology)\n', flush=True)
+        print('Copyright (C) 2020 University of Leicester\n', flush=True)
+        print('This program comes with ABSOLUTELY NO WARRANTY; for details go to www.gnu.org/licenses/gpl-3.0.html', flush=True)
+        print('This is free software, and you are welcome to redistribute it', flush=True)
+        print('under certain conditions; go to www.gnu.org/licenses/gpl-3.0.html for details.\n', flush=True)
+        print(f'Wrapper Version: {VERSION}\n', flush=True)
 
         if callable(self.extra_text):
             print(self.extra_text(self), flush=True)
@@ -290,6 +325,22 @@ class RelionJob:
         # print(f"Using {GPU_COUNT} GPUs: {GPU_IDS}.", flush=True)
         print(f'=================', flush=True)
 
+
+    def write_relion_output_nodes(self):
+        if self._relion_output_node_int >= 0:
+            with open(os.path.join(self.relion_job_dir, 'RELION_OUTPUT_NODES.star'), 'w') as f:
+                f.write('data_output_nodes\n')
+                f.write('loop_\n')
+                f.write('_rlnPipeLineNodeName #1\n')
+                f.write('_rlnPipeLineNodeType #2\n')
+                f.write(f'{os.path.join(self.relion_job_dir, self.output_star_name)}    {self._relion_output_node_int}\n')
+
+
+    def write_relion_output_starfile(self):
+        pass
+
+    def recover_output_files(self):
+        pass
 
     def initial_run(self):
         self._parse_args()

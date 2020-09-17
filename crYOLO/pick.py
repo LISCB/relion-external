@@ -1,19 +1,43 @@
+"""
+    This file is part of the relion-external suite that allows integration of
+    arbitrary software into Relion 3.1.
+
+    Copyright (C) 2020 University of Leicester
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see www.gnu.org/licenses/gpl-3.0.html.
+
+    Written by TJ Ragan (tj.ragan@leicester.ac.uk),
+    Leicester Institute of Structural and Chemical Biology (LISCB)
+
+"""
+
+
 import os
+from pathlib import Path
 from subprocess import Popen, check_output, PIPE, CalledProcessError
 from glob import glob
 import json
-import sys
+import shutil
 
 from util.framework.micrographs2starfiles import Micrographs2Starfiles
 
 
-CRYOLO = ' /net/prog/anaconda3/envs/cryolo/bin/cryolo_predict.py'
-CPU_PYTHON = '/net/prog/anaconda3/envs/cryolo/bin/python '
-GPU_PYTHON = '/net/prog/anaconda3/envs/cryolo-gpu/bin/python '
-# CRYOLO_PHOSNET_LOCATION = '/net/common/cryolo/gmodel_phosnet_202002_N63.h5'
-CRYOLO_PHOSNET_LOCATION = '/net/common/cryolo/gmodel_phosnet_202005_N63_c17.h5'
-# CRYOLO_PHOSNET_NN_LOCATION = '/net/common/cryolo/gmodel_phosnet_202003_nn_N63.h5'
-CRYOLO_PHOSNET_NN_LOCATION = '/net/common/cryolo/gmodel_phosnet_202005_nn_N63_c17.h5'
+CRYOLO_BIN_DIR = os.environ.get('CRYOLO_BIN_DIR', os.path.dirname(shutil.which('python3')))
+CPU_PYTHON = os.environ.get('CRYOLO_CPU_PYTHON', os.environ.get('CRYOLO_PYTHON', shutil.which('python3')))
+GPU_PYTHON = os.environ.get('CRYOLO_GPU_PYTHON', os.environ.get('CRYOLO_PYTHON', shutil.which('python3')))
+CRYOLO_PHOSNET_LOCATION = os.environ.get('CRYOLO_GENERAL_MODEL', '/net/common/cryolo/gmodel_phosnet_202005_N63_c17.h5')
+CRYOLO_PHOSNET_NN_LOCATION = os.environ.get('CRYOLO_GENERAL_NN_MODEL', '/net/common/cryolo/gmodel_phosnet_202005_nn_N63_c17.h5')
 
 
 def setup_worker(job_object):
@@ -49,16 +73,21 @@ def run_worker(job_object, **kwargs):
     else:
         PYTHON = CPU_PYTHON
     cryolo_cmds = []
+    weights = parsed_args.weights
+    abs_weights = os.path.abspath(os.path.join(job_object.top_dir, parsed_args.weights))
+    if os.path.isfile(abs_weights):
+        weights = abs_weights
+
     for i, d in enumerate(input_dirs):
         one_cryolo_cmd = ' '
         # one_cryolo_cmd = 'OMP_NUM_THREADS=1 '
-        one_cryolo_cmd += PYTHON + CRYOLO
+        one_cryolo_cmd += ' '.join((PYTHON, os.path.join(CRYOLO_BIN_DIR, 'cryolo_predict.py')))
         one_cryolo_cmd += ' --write_empty --conf cryolo_config.json '
-        one_cryolo_cmd += f' --weights {parsed_args.weights}'
+        one_cryolo_cmd += f' --weights {weights}'
         one_cryolo_cmd += f' --input input/{d} --output output/{d} '
         one_cryolo_cmd += f' --num_cpu {threads} '
         for arg in vars(parsed_args):
-            if arg not in ['o', 'in_mics', 'j', 'cache', 'keep_preproc',
+            if arg not in ['o', 'in_mics', 'j', 'cache', 'keep_preproc', 'weights',
                 'filament', 'filament_width', 'mask_width', 'box_distance', 'minimum_number_boxes', 'search_range_factor',
                 'otf', 'norm'
                            ]:
@@ -226,5 +255,11 @@ if __name__ == '__main__':
                             help='The search range for connecting boxes is the box size times this factor.')
 
     job.count_done_output_items = count_done_output_items
+
+    job._parse_args()
+
+    if not os.path.isfile(job.args.weights):
+        # Path('RELION_JOB_EXIT_FAILURE').touch()
+        raise(FileNotFoundError(f'The model file {job.args.weights} was not found.'))
 
     job.run()
