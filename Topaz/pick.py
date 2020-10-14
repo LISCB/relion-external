@@ -260,7 +260,7 @@ class Topaz_Picker(Micrographs2Starfiles):
     def cleanup(self, job_object):
         if job_object.args.keep_preproc:
             for d in glob(os.path.join(job_object.working_top_dir, 'worker*')):
-                shutil.rmtree(os.path.join(d, 'preproc'))
+                shutil.rmtree(os.path.join(d, 'preproc'), ignore_errors=True)
 
 
 if __name__ == '__main__':
