@@ -154,6 +154,8 @@ class Topaz_Picker(Micrographs2Starfiles):
             for pth in output:
                 topaz_output_files.add(os.path.join(os.path.dirname(pth.replace('/input/', '/output/')), self.OUTPUT_FILENAME))
             for topaz_output_file in topaz_output_files:
+                if not os.path.exists(topaz_output_file):
+                    continue
                 picks = defaultdict(list)
                 with open(topaz_output_file) as f:
                     next(f)  # skip header line
@@ -257,11 +259,48 @@ class Topaz_Picker(Micrographs2Starfiles):
             pass
 
 
+    def write_relion_output_starfile(self):
+        autopick_text = '\n# version 30001\n'
+        autopick_text += '\ndata_coordinate_files\n'
+        autopick_text += '\nloop_\n'
+        autopick_text += '_rlnMicrographName #1\n'
+        autopick_text += '_rlnMicrographCoordinates #2\n'
+
+        from glob import glob
+        micrograph_source_dirs = self.relion_path_mapping(self.input_micrographs_starfile).keys()
+        output_star_files = []
+        for micrograph_output_dir in micrograph_source_dirs:
+            relion_output_directory = os.path.join(self.relion_job_dir, micrograph_output_dir)
+            for star_filename in glob(os.path.join(relion_output_directory, '*.star')):
+                output_star_files.append(star_filename)
+        relion_job_dir_len = len(self.relion_job_dir)
+
+        len_name = len(self.name)
+        for output_filename in output_star_files:
+            out = output_filename[relion_job_dir_len:]
+            out_root = os.path.splitext(out)[0][:-(len_name+1)]
+            for m in self.input_micrographs_starfile['micrographs']:
+                pth, fil = os.path.split(m.rlnMicrographName)
+                pth = os.path.basename(pth)
+                in_file = os.path.join(pth, fil)
+                in_root = os.path.splitext(in_file)[0]
+                if in_root == out_root:
+                    autopick_text += f'{m.rlnMicrographName} {output_filename}\n'
+                    break
+
+        with open(os.path.join(self.relion_job_dir, 'autopick.star'), 'w') as f:
+            f.write(autopick_text)
+
+        super().write_relion_output_starfile()
+
+
     def cleanup(self, job_object):
         if job_object.args.keep_preproc:
-            for d in glob(os.path.join(job_object.working_top_dir, 'worker*')):
-                shutil.rmtree(os.path.join(d, 'preproc'), ignore_errors=True)
-
+            try:
+                for d in glob(os.path.join(job_object.working_top_dir, 'worker*')):
+                    shutil.rmtree(os.path.join(d, 'preproc'), ignore_errors=True)
+            except:
+                pass
 
 if __name__ == '__main__':
     job = Topaz_Picker()

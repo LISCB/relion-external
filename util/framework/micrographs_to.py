@@ -235,7 +235,10 @@ class MicrographsTo(RelionJob):
             if self.worker_output_analysis_function is not None:
                 self.worker_output_analysis_function(self)
             if self.worker_cleanup_function is not None:
-                self.worker_cleanup_function(self)
+                try:
+                    self.worker_cleanup_function(self)
+                except:
+                    pass
 
             self.write_relion_output_starfile()
             self.write_relion_output_nodes()

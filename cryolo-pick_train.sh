@@ -23,7 +23,7 @@
 #  Leicester Institute of Structural and Chemical Biology (LISCB)             #
 ###############################################################################
 
-
+export LD_LIBRARY_PATH=/usr/local/cuda-11.1/lib64:/usr/local/cuda-11.0/lib64:$LD_LIBRARY_PATH
 if [ ! -z "${CRYOLO_PYTHON}" ]; then
     PYTHON=${CRYOLO_PYTHON}
 elif [ ! -z "${CRYOLO_GPU_PYTHON}" ]; then

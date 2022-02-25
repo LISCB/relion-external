@@ -54,7 +54,7 @@ def read_pick_star(starfile_location):
             for p in picks_proc.stdout.decode().splitlines():
                 split_p = p.strip().split()
                 picks.append(Pick(rlnMicrographName=None,
-                                  rlnCoordinateX=split_p[0], rlnCoordinateY=int(split_p[1]),
+                                  rlnCoordinateX=split_p[0], rlnCoordinateY=int(float(split_p[1])),
                                   rlnAutopickFigureOfMerit=float(split_p[2]),
                                   rlnClassNumber=float(split_p[3]),
                                   rlnAnglePsi=float(split_p[4])))

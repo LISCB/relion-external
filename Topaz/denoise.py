@@ -38,7 +38,7 @@ def run_worker(job_object, **kwargs):
     output = check_output('find . -name "*.mrc"', shell=True, universal_newlines=True).splitlines()
 
     gpu_id = env.get('CUDA_VISIBLE_DEVICES', -1)
-    cmd = f'{TOPAZ} denoise --patch-size 1024 --device {gpu_id} '
+    cmd = f'{TOPAZ} denoise --patch-size 512 --device {gpu_id} '
 
     dirs = set([os.path.dirname(d) for d in output])
     for d in dirs:

@@ -23,7 +23,7 @@
 #  Leicester Institute of Structural and Chemical Biology (LISCB)             #
 ###############################################################################
 
-
+export LD_LIBRARY_PATH=/usr/local/cuda-11.1/lib64:/usr/local/cuda-11.0/lib64:$LD_LIBRARY_PATH
 if [ ! -z "${JANNI_PYTHON}" ]; then
     PYTHON=${JANNI_PYTHON}
 elif [ ! -z "${JANNI_GPU_PYTHON}" ]; then

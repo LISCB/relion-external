@@ -199,7 +199,7 @@ class Topaz_Pick_Trainer(ParticlesTo):
             f.write('image_name\tx_coord\ty_coord\n')
             for p in starfile['particles']:
                 line = f'{os.path.splitext(os.path.basename(p.rlnMicrographName))[0]}'
-                line += f'\t{int(p.rlnCoordinateX)}\t{int(p.rlnCoordinateY)}\n'
+                line += f'\t{int(float(p.rlnCoordinateX))}\t{int(float(p.rlnCoordinateY))}\n'
                 f.write(line)
 
 
